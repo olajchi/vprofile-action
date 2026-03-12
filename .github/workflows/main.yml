@@ -2,9 +2,9 @@ name: vprofile actions
 on: workflow_dispatch
 
 env:
-  # This silences the warning as much as possible, but Exit Code 1 is a code error
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   AWS_REGION: us-east-2
+  # This tells the runner to use Node 24, but third-party actions might still warn
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true 
 
 jobs:
   Testing:
@@ -21,17 +21,18 @@ jobs:
           cache: 'maven'
 
       - name: Build and Test
-        # Running 'install' ensures all binaries are created in /target
-        run: mvn clean install -DskipTests=false 
+        # We use 'install' to ensure all classes are compiled for Sonar
+        run: mvn clean install -DskipTests=false
 
       - name: Checkstyle
+        # This creates the report Sonar needs
         run: mvn checkstyle:checkstyle
 
       - name: Setup SonarQube
         uses: warchant/setup-sonar-scanner@v8
 
       - name: SonarQube Scan
-        # Added a check to make sure target/classes exists before scanning
+        # The "|" allows us to list arguments clearly without shell errors
         run: |
           sonar-scanner \
             -Dsonar.host.url=${{ secrets.SONAR_URL }} \
@@ -45,7 +46,6 @@ jobs:
             -Dsonar.java.checkstyle.reportPaths=target/checkstyle-result.xml
 
       - name: SonarQube Quality Gate check
-        id: sonarqube-quality-gate-check
         uses: sonarsource/sonarqube-quality-gate-action@v1.1.0
         timeout-minutes: 5
         env:
