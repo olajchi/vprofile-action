@@ -1,11 +1,10 @@
 name: vprofile actions
 on: workflow_dispatch
-
 env:
   AWS_REGION: us-east-2
   ECR_REPOSITORY: vprofileapp
   EKS_CLUSTER: vprofile-eks
-  # Silences the 2026 Node.js warnings and forces the modern runner
+  # Crucial: Forces modern Node 24 runtime across all steps
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -15,33 +14,43 @@ jobs:
       - name: Code checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
-        # v4 is the standard for 2026 stability and Node 24 support
+      - name: Maven test
+        run: mvn test
+
+      - name: Checkstyle
+        run: mvn checkstyle:checkstyle
+
+      - name: Set up Java 21
+        # UPGRADED: v4 supports Node 24; Java 21 is required for Sonar 2026.1 LTA
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
           cache: 'maven'
 
-      - name: Build and Install
-        # This compiles the code and runs Unit Tests
-        run: mvn clean install -DskipTests=false
+      - name: Setup SonarQube
+        # UPGRADED: v8 is the stable release for 2026
+        uses: warchant/setup-sonar-scanner@v8
 
-      - name: Run Checkstyle
-        # This performs static code analysis locally without needing SonarQube
-        run: mvn checkstyle:checkstyle
+      - name: SonarQube Scan
+        # Note the change to -Dsonar.java.binaries to ensure full coverage
+        run: |
+          sonar-scanner \
+            -Dsonar.host.url=${{ secrets.SONAR_URL }} \
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }} \
+            -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }} \
+            -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }} \
+            -Dsonar.sources=src/ \
+            -Dsonar.junit.reportsPath=target/surefire-reports/ \
+            -Dsonar.jacoco.reportsPath=target/jacoco.exec \
+            -Dsonar.java.checkstyle.reportPaths=target/checkstyle-result.xml \
+            -Dsonar.java.binaries=target/classes
 
-      - name: Upload Test Reports
-        # This saves your test results so you can view them in the GitHub UI
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: junit-reports
-          path: target/surefire-reports/*.xml
-
-      - name: Upload Checkstyle Report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: checkstyle-report
-          path: target/checkstyle-result.xml
+      - name: SonarQube Quality Gate check
+        id: sonarqube-quality-gate-check
+        # UPGRADED: v1.1.0 is the stable semantic version
+        uses: sonarsource/sonarqube-quality-gate-action@master
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_URL }}
