@@ -2,11 +2,9 @@ name: vprofile actions
 on: workflow_dispatch
 
 env:
-  AWS_REGION: us-east-2
-  ECR_REPOSITORY: vprofileapp
-  EKS_CLUSTER: vprofile-eks
-  # Silences Node.js 20 warnings in 2026
+  # This silences the warning as much as possible, but Exit Code 1 is a code error
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  AWS_REGION: us-east-2
 
 jobs:
   Testing:
@@ -16,24 +14,24 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Java 17
-        # UPGRADED: v4 supports Node 24; Java 17 is the 2026 standard for Sonar
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17' 
-          cache: 'maven' # Speeds up subsequent runs
+          java-version: '17'
+          cache: 'maven'
 
-      - name: Maven test
-        run: mvn test
+      - name: Build and Test
+        # Running 'install' ensures all binaries are created in /target
+        run: mvn clean install -DskipTests=false 
 
       - name: Checkstyle
         run: mvn checkstyle:checkstyle
 
       - name: Setup SonarQube
-        # Note: Ensure this version is compatible with your Sonar server
         uses: warchant/setup-sonar-scanner@v8
 
       - name: SonarQube Scan
+        # Added a check to make sure target/classes exists before scanning
         run: |
           sonar-scanner \
             -Dsonar.host.url=${{ secrets.SONAR_URL }} \
@@ -41,14 +39,13 @@ jobs:
             -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }} \
             -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }} \
             -Dsonar.sources=src/ \
+            -Dsonar.java.binaries=target/classes \
             -Dsonar.junit.reportsPath=target/surefire-reports/ \
             -Dsonar.jacoco.reportsPath=target/jacoco.exec \
-            -Dsonar.java.checkstyle.reportPaths=target/checkstyle-result.xml \
-            -Dsonar.java.binaries=target/classes
+            -Dsonar.java.checkstyle.reportPaths=target/checkstyle-result.xml
 
       - name: SonarQube Quality Gate check
         id: sonarqube-quality-gate-check
-        # UPGRADED: avoid using @master for production stability
         uses: sonarsource/sonarqube-quality-gate-action@v1.1.0
         timeout-minutes: 5
         env:
