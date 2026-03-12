@@ -99,7 +99,6 @@ jobs:
 
         - name: Login to ECR
           run: |
-          kubectl delete secret regcred --ignore-not-found
           kubectl create secret docker-registry regcred \
             --docker-server=${{ secrets.REGISTRY }} \
             --docker-username=AWS \
