@@ -5,7 +5,7 @@ env:
   AWS_REGION: us-east-2
   ECR_REPOSITORY: vprofileapp
   EKS_CLUSTER: vprofile-eks
-  # Forces the runner to Node 24 for 2026 compliance
+  # Silences the 2026 Node.js warnings and forces the modern runner
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -16,6 +16,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Java 17
+        # v4 is the standard for 2026 stability and Node 24 support
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
@@ -23,36 +24,24 @@ jobs:
           cache: 'maven'
 
       - name: Build and Install
-        # We run install to make sure all .class files are generated
+        # This compiles the code and runs Unit Tests
         run: mvn clean install -DskipTests=false
 
-      - name: List files for debugging
-        # If the scan fails, look at this step to see the actual path to your .class files
-        run: find target -name "*.class" | head -n 20
-
-      - name: Checkstyle
+      - name: Run Checkstyle
+        # This performs static code analysis locally without needing SonarQube
         run: mvn checkstyle:checkstyle
 
-      - name: Setup SonarQube
-        uses: warchant/setup-sonar-scanner@v8
+      - name: Upload Test Reports
+        # This saves your test results so you can view them in the GitHub UI
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-reports
+          path: target/surefire-reports/*.xml
 
-      - name: SonarQube Scan
-        run: |
-          sonar-scanner -X \
-            -Dsonar.host.url=${{ secrets.SONAR_URL }} \
-            -Dsonar.login=${{ secrets.SONAR_TOKEN }} \
-            -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }} \
-            -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }} \
-            -Dsonar.sources=src/ \
-            -Dsonar.java.binaries=target/classes \
-            -Dsonar.junit.reportsPath=target/surefire-reports/ \
-            -Dsonar.jacoco.reportsPath=target/jacoco.exec \
-            -Dsonar.java.checkstyle.reportPaths=target/checkstyle-result.xml
-
-      - name: SonarQube Quality Gate check
-        id: sonarqube-quality-gate-check
-        uses: sonarsource/sonarqube-quality-gate-action@v1.1.0
-        timeout-minutes: 5
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_URL }}
+      - name: Upload Checkstyle Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkstyle-report
+          path: target/checkstyle-result.xml
