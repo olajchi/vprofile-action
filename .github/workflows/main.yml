@@ -5,7 +5,7 @@ env:
   AWS_REGION: us-east-2
   ECR_REPOSITORY: vprofileapp
   EKS_CLUSTER: vprofile-eks
-  # Silences the 2026 Node.js warnings and forces the modern runner
+  # Forces the runner to Node 24 for 2026 compliance
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -16,26 +16,27 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Java 17
-        # v4 is the standard for 2026 stability
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
           cache: 'maven'
 
-      - name: Build and Test
-        # 'install' ensures all classes are compiled into target/classes for Sonar
+      - name: Build and Install
+        # We run install to make sure all .class files are generated
         run: mvn clean install -DskipTests=false
 
+      - name: List files for debugging
+        # If the scan fails, look at this step to see the actual path to your .class files
+        run: find target -name "*.class" | head -n 20
+
       - name: Checkstyle
-        # Generates the report required by Sonar
         run: mvn checkstyle:checkstyle
 
       - name: Setup SonarQube
         uses: warchant/setup-sonar-scanner@v8
 
       - name: SonarQube Scan
-        # Added -X for debug logging and used "|" for clear parameter management
         run: |
           sonar-scanner -X \
             -Dsonar.host.url=${{ secrets.SONAR_URL }} \
@@ -50,7 +51,6 @@ jobs:
 
       - name: SonarQube Quality Gate check
         id: sonarqube-quality-gate-check
-        # Using the specific stable v1.1.0 tag
         uses: sonarsource/sonarqube-quality-gate-action@v1.1.0
         timeout-minutes: 5
         env:
